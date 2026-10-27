@@ -1,0 +1,16 @@
+services:
+  molniya:
+    build: .
+    command: python -u main.py
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6340:6340"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "6340"
+      # BASE_URL is what gets used in the send/receive links shown
+      # to users, so it must be reachable from *outside* the container.
+      BASE_URL: "http://localhost:6340"
+      BUFFER_WRITE_SIZE: "65536"
+      MAX_BUFFER_SIZE: "4194304" # BUFFER_WRITE_SIZE * 64
+      DICTIONARY_FILE: "dictionary.txt"

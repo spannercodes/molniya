@@ -5,7 +5,7 @@ from collections import deque
 from os import environ
 
 BUFFER_WRITE_SIZE = int(environ.get("BUFFER_WRITE_SIZE", default=64 * 1024))
-MAX_BUFFER_SIZE = int(environ.get("MAX_BUFFER_SIZE", default=BUFFER_WRITE_SIZE * 8))
+MAX_BUFFER_SIZE = int(environ.get("MAX_BUFFER_SIZE", default=BUFFER_WRITE_SIZE * 64))
 DICTIONARY_FILE = environ.get("DICTIONARY_FILE", default="dictionary.txt")
 
 HOST = environ.get("HOST", default="127.0.0.1")
@@ -33,8 +33,10 @@ class Session:
         self.receiver_error = None
     
     async def close_sender(self, error=None):
-        self.sender_finished = True
-        self.sender_error = error
+        async with self.lock:
+            self.sender_finished = True
+            self.sender_error = error
+            self.lock.notify()
     
     async def close_receiver(self, error=None):
         self.receiver_finished = True
@@ -56,9 +58,7 @@ class Session:
                 chunk = self.buffer.popleft()
                 self.buffer_size -= len(chunk)
                 return chunk
-            if not self.buffer and self.sender_finished:
-                return None
-            raise RuntimeError("How did we get here?")
+            return None
 
 class Molniya:
     def __init__(self, base_url = None):
@@ -102,7 +102,7 @@ class Molniya:
         if user_agent is not None and "curl" in user_agent:
             response_text = f"Send to: {send_url}\n" \
                             f"Receive at: {receive_url}\n\n" \
-                            f"curl command:\n  curl {send_url} --upload-file FILENAME"
+                            f"curl command:\n  curl {send_url} --upload-file FILENAME\n\n"
             content_type = "text/plain"
         else:
             response_text = f"""<!DOCTYPE html>""" \
@@ -161,6 +161,7 @@ class Molniya:
             await session.close_sender()
         except Exception as e:
             await session.close_sender(e)
+            return web.Response(body="Buffer overflow", status=500)
         
         return web.Response()
 
